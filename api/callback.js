@@ -120,7 +120,12 @@ async function askChappy(userText) {
     throw new Error("OpenAI API request failed");
   }
 
-  return data.output_text || "うまく回答を作れませんでした。";
+const aiText = data.output
+  ?.flatMap(item => item.content || [])
+  ?.find(item => item.type === "output_text")
+  ?.text;
+
+return aiText || "うまく回答を作れませんでした。";
 }async function sendMessage(userId, text) {
   const botId = process.env.LINEWORKS_BOT_ID;
 
