@@ -89,7 +89,39 @@ if (!response.ok || !data.access_token) {
   return data.access_token;
 }
 
-async function sendMessage(userId, text) {
+async function askChappy(userText) {
+  const apiKey = process.env.OPENAI_API_KEY;
+
+  if (!apiKey) {
+    throw new Error("OPENAI_API_KEY is not set");
+  }
+
+  const response = await fetch(
+    "https://api.openai.com/v1/responses",
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        model: "gpt-5.6",
+        instructions:
+          "あなたは社内業務をサポートするAIアシスタント「チャッピー」です。日本語で、わかりやすく簡潔に回答してください。",
+        input: userText
+      })
+    }
+  );
+
+  const data = await response.json();
+
+  if (!response.ok) {
+    console.error("OpenAI API error:", response.status, data);
+    throw new Error("OpenAI API request failed");
+  }
+
+  return data.output_text || "うまく回答を作れませんでした。";
+}async function sendMessage(userId, text) {
   const botId = process.env.LINEWORKS_BOT_ID;
 
   if (!botId) {
@@ -190,10 +222,9 @@ module.exports = async (req, res) => {
     ) {
       const receivedText = event.content.text || "";
 
-      await sendMessage(
-        event.source.userId,
-        `チャッピーです。受信しました。\n「${receivedText}」`
-      );
+      const aiReply = await askChappy(receivedText);
+
+await sendMessage(event.source.userId, aiReply);
     }
   } catch (error) {
     console.error("Bot reply error:", error);
