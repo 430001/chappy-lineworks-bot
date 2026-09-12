@@ -1,0 +1,8 @@
+{
+  "rewrites": [
+    {
+      "source": "/api/driver-comment-notify",
+      "destination": "/api/driver-comment-notify-v2"
+    }
+  ]
+}
