@@ -106,7 +106,16 @@ async function askChappy(userText) {
       },
       body: JSON.stringify({
         model: "gpt-5.6",
-        instructions:
+        instructions: `
+あなたは社内業務をサポートするAIアシスタント「チャッピー」です。
+日本語で、わかりやすく簡潔に回答してください。
+
+現在の日本時間は
+${new Date().toLocaleString("ja-JP", { timeZone: "Asia/Tokyo" })}
+です。
+
+日付や曜日、現在時刻について質問された場合は、必ずこの日本時間を基準に回答してください。
+`,
           "あなたは社内業務をサポートするAIアシスタント「チャッピー」です。日本語で、わかりやすく簡潔に回答してください。",
         input: userText
       })
