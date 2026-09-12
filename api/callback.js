@@ -73,8 +73,16 @@ async function getAccessToken() {
 
   const data = await response.json();
 
-  if (!response.ok || !data.access_token) {
-    console.error("Token error:", data);
+if (!response.ok || !data.access_token) {
+  console.error(
+    "Token error detail:",
+    JSON.stringify({
+      status: response.status,
+      statusText: response.statusText,
+      data: data
+    })
+  );
+ console.error("Token error detail:", JSON.stringify(data));
     throw new Error("Failed to get LINE WORKS access token");
   }
 
