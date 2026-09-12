@@ -135,11 +135,18 @@ module.exports = async function handler(req, res) {
       });
     }
 
-    const userId = process.env.LINEWORKS_NOTIFY_USER_ID;
+    const userIds = String(
+  process.env.LINEWORKS_NOTIFY_USER_IDS ||
+  process.env.LINEWORKS_NOTIFY_USER_ID ||
+  ""
+)
+  .split(",")
+  .map(v => v.trim())
+  .filter(Boolean);
 
-    if (!userId) {
-      throw new Error("Notify user not configured");
-    }
+if (!userIds.length) {
+  throw new Error("Notify user not configured");
+}
 
     const text =
 `🚨 Driverコメント
@@ -156,7 +163,7 @@ ${comment}
   timeZone: "Asia/Tokyo"
 })}`;
 
-    await sendMessage(userId, text);
+    await Promise.all(userIds.map(userId => sendMessage(userId, text)));
 
     return res.status(200).json({
       ok: true
