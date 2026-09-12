@@ -10,12 +10,7 @@ function base64url(input) {
 
 function createJwt(clientId, serviceAccount, privateKey) {
   const now = Math.floor(Date.now() / 1000);
-
-  const header = {
-    alg: "RS256",
-    typ: "JWT"
-  };
-
+  const header = { alg: "RS256", typ: "JWT" };
   const payload = {
     iss: clientId,
     sub: serviceAccount,
@@ -26,7 +21,6 @@ function createJwt(clientId, serviceAccount, privateKey) {
   const encodedHeader = base64url(JSON.stringify(header));
   const encodedPayload = base64url(JSON.stringify(payload));
   const unsignedToken = `${encodedHeader}.${encodedPayload}`;
-
   const signature = crypto.sign(
     "RSA-SHA256",
     Buffer.from(unsignedToken),
@@ -46,12 +40,7 @@ async function getAccessToken() {
     throw new Error("LINE WORKS authentication settings are missing");
   }
 
-  const assertion = createJwt(
-    clientId,
-    serviceAccount,
-    privateKey
-  );
-
+  const assertion = createJwt(clientId, serviceAccount, privateKey);
   const body = new URLSearchParams({
     assertion,
     grant_type: "urn:ietf:params:oauth:grant-type:jwt-bearer",
@@ -64,25 +53,18 @@ async function getAccessToken() {
     "https://auth.worksmobile.com/oauth2/v2.0/token",
     {
       method: "POST",
-      headers: {
-        "Content-Type": "application/x-www-form-urlencoded"
-      },
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
       body
     }
   );
 
   const data = await response.json();
-
-if (!response.ok || !data.access_token) {
-  console.error(
-    "Token error detail:",
-    JSON.stringify({
+  if (!response.ok || !data.access_token) {
+    console.error("Token error detail:", JSON.stringify({
       status: response.status,
       statusText: response.statusText,
-      data: data
-    })
-  );
- console.error("Token error detail:", JSON.stringify(data));
+      data
+    }));
     throw new Error("Failed to get LINE WORKS access token");
   }
 
@@ -91,22 +73,17 @@ if (!response.ok || !data.access_token) {
 
 async function askChappy(userText) {
   const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey) throw new Error("OPENAI_API_KEY is not set");
 
-  if (!apiKey) {
-    throw new Error("OPENAI_API_KEY is not set");
-  }
-
-  const response = await fetch(
-    "https://api.openai.com/v1/responses",
-    {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({
-        model: "gpt-5.6",
-        instructions: `
+  const response = await fetch("https://api.openai.com/v1/responses", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({
+      model: "gpt-5.6",
+      instructions: `
 あなたは社内業務をサポートするAIアシスタント「チャッピー」です。
 日本語で、わかりやすく簡潔に回答してください。
 
@@ -116,38 +93,61 @@ ${new Date().toLocaleString("ja-JP", { timeZone: "Asia/Tokyo" })}
 
 日付や曜日、現在時刻について質問された場合は、必ずこの日本時間を基準に回答してください。
 `,
-
-        input: userText
-      })
-    }
-  );
+      input: userText
+    })
+  });
 
   const data = await response.json();
-
   if (!response.ok) {
     console.error("OpenAI API error:", response.status, data);
     throw new Error("OpenAI API request failed");
   }
 
-const aiText = data.output
-  ?.flatMap(item => item.content || [])
-  ?.find(item => item.type === "output_text")
-  ?.text;
+  const aiText = data.output
+    ?.flatMap(item => item.content || [])
+    ?.find(item => item.type === "output_text")
+    ?.text;
 
-return aiText || "うまく回答を作れませんでした。";
-}async function sendMessage(userId, text) {
-  const botId = process.env.LINEWORKS_BOT_ID;
+  return aiText || "うまく回答を作れませんでした。";
+}
 
-  if (!botId) {
-    throw new Error("LINEWORKS_BOT_ID is not set");
-  }
+function isDriverProgressQuestion(text) {
+  const q = String(text || "");
+  return /全コース|Driver進捗|ドライバー進捗|配達進捗|残り何件|完了何件|件数.*完了|完了.*残り|コース.*進捗/i.test(q);
+}
 
-  const accessToken = await getAccessToken();
+async function getDriverProgress(question) {
+  const secret = process.env.CHAPPY_NOTIFY_SECRET;
+  if (!secret) throw new Error("CHAPPY_NOTIFY_SECRET is not set");
 
   const response = await fetch(
-    `https://www.worksapis.com/v1.0/bots/${encodeURIComponent(
-      botId
-    )}/users/${encodeURIComponent(userId)}/messages`,
+    "https://c-assistant-driver.vercel.app/api/driver-progress",
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-chappy-notify-secret": secret
+      },
+      body: JSON.stringify({ question })
+    }
+  );
+
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok || !data.text) {
+    console.error("Driver progress API error:", response.status, data);
+    throw new Error("Failed to get Driver progress");
+  }
+
+  return data.text;
+}
+
+async function sendMessage(userId, text) {
+  const botId = process.env.LINEWORKS_BOT_ID;
+  if (!botId) throw new Error("LINEWORKS_BOT_ID is not set");
+
+  const accessToken = await getAccessToken();
+  const response = await fetch(
+    `https://www.worksapis.com/v1.0/bots/${encodeURIComponent(botId)}/users/${encodeURIComponent(userId)}/messages`,
     {
       method: "POST",
       headers: {
@@ -155,10 +155,7 @@ return aiText || "うまく回答を作れませんでした。";
         "Content-Type": "application/json"
       },
       body: JSON.stringify({
-        content: {
-          type: "text",
-          text
-        }
+        content: { type: "text", text }
       })
     }
   );
@@ -172,56 +169,32 @@ return aiText || "うまく回答を作れませんでした。";
 
 module.exports = async (req, res) => {
   if (req.method === "GET") {
-    return res.status(200).json({
-      ok: true,
-      service: "chappy-lineworks-bot"
-    });
+    return res.status(200).json({ ok: true, service: "chappy-lineworks-bot" });
   }
 
   if (req.method !== "POST") {
-    return res.status(405).json({
-      error: "Method Not Allowed"
-    });
+    return res.status(405).json({ error: "Method Not Allowed" });
   }
 
   const botSecret = process.env.LINEWORKS_BOT_SECRET;
-
   if (!botSecret) {
     console.error("LINEWORKS_BOT_SECRET is not set");
-    return res.status(500).json({
-      error: "Server configuration error"
-    });
+    return res.status(500).json({ error: "Server configuration error" });
   }
 
-  const body =
-    typeof req.body === "string"
-      ? req.body
-      : JSON.stringify(req.body || {});
-
-  const receivedSignature =
-    req.headers["x-works-signature"];
-
+  const body = typeof req.body === "string" ? req.body : JSON.stringify(req.body || {});
+  const receivedSignature = req.headers["x-works-signature"];
   const calculatedSignature = crypto
     .createHmac("sha256", botSecret)
     .update(body, "utf8")
     .digest("base64");
 
-  if (
-    !receivedSignature ||
-    receivedSignature !== calculatedSignature
-  ) {
+  if (!receivedSignature || receivedSignature !== calculatedSignature) {
     console.error("Invalid LINE WORKS signature");
-
-    return res.status(401).json({
-      error: "Invalid signature"
-    });
+    return res.status(401).json({ error: "Invalid signature" });
   }
 
-  const event =
-    typeof req.body === "string"
-      ? JSON.parse(req.body)
-      : req.body;
-
+  const event = typeof req.body === "string" ? JSON.parse(req.body) : req.body;
   console.log("LINE WORKS callback received:", {
     type: event?.type,
     source: event?.source,
@@ -235,16 +208,22 @@ module.exports = async (req, res) => {
       event?.source?.userId
     ) {
       const receivedText = event.content.text || "";
+      const reply = isDriverProgressQuestion(receivedText)
+        ? await getDriverProgress(receivedText)
+        : await askChappy(receivedText);
 
-      const aiReply = await askChappy(receivedText);
-
-await sendMessage(event.source.userId, aiReply);
+      await sendMessage(event.source.userId, reply);
     }
   } catch (error) {
     console.error("Bot reply error:", error);
+    try {
+      if (event?.source?.userId) {
+        await sendMessage(event.source.userId, "Driver進捗の取得でエラーが発生しました。少ししてからもう一度試してください。");
+      }
+    } catch (sendError) {
+      console.error("Error reply failed:", sendError);
+    }
   }
 
-  return res.status(200).json({
-    ok: true
-  });
+  return res.status(200).json({ ok: true });
 };
